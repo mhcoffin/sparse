@@ -5,7 +5,7 @@ import (
 	"unicode"
 )
 
-// Package sparse provides types and functions to implement simple parsers.
+// Package sparse provides types and functions to implement simple parser.
 //
 // A Parser is a function that takes a slice of runes and either succeeds or
 // fails to match a prefix (possibly empty) of the slice. If it succeeds it
@@ -16,7 +16,7 @@ import (
 // parser returns a tree that indicates the portion of the input it matched,
 // but without any children.
 //
-// A combinator is a parser that takes other parsers as parameters. E.g., [Optional]
+// A combinator is a parser that takes other parser as parameters. E.g., [Optional]
 // takes a parser as parameter and returns a new parser that tries to match using
 // the parameter, but if that fails, succeeds with the empty prefix. Another example
 // is [Seq]: Seq(Digits, Exactly("."), Digits) matches a sequence of one or more digits
@@ -27,30 +27,24 @@ import (
 // what was matched.
 type Parser func(input []rune) *Tree
 
-// A Tree describes the result of applying a parser to an input. 
-// 
-// [Tree.Runes] is set to whatever prefix of the input was matched by the parser. It may be empty.
+// A Tree describes the result of applying a parser to an input.
 //
-// [Tree.Children] is set to the results of sub-parsers. E.g., 
-//   Seq(Digits, Exactly("."), Digits)
-// returns a tree with three children: the first for the digits, the second for ".", and
-// the third for more digits.
+// [Tree.Runes] contains the prefix of the input was matched by the parser.
+// It may be empty.
 //
-// The Tag is supplied by the user to make processing the parse tree easier. Any parser
-// can be [Tagged]: Digits.Tagged(17) or Seq(Digits, Exactly("."), Digits).Tagged(9).
+// [Tree.Children] contains tagged subtrees. E.g.,
+//
+//	Seq(Digits.Tagged(1), Exactly("."), Digits.Tagged(2))
+//
+// returns will return a tree with two children: the first for digits tagged 1,
+// the second for digits tagged 2.
 type Tree struct {
 	Runes    []rune
 	Children []*Tree
 	Tag      int
 }
 
-const (
-	// ElideTag is a special tag that indicates that a Tree should be elided in a sequence.
-	ElideTag = -1
-	FlattenTag = -2
-)
-
-// String returns all the runes matched in creating t, including elisions.
+// String returns all the runes matched, including elisions.
 func (t *Tree) String() string {
 	return string(t.Runes)
 }
@@ -63,9 +57,8 @@ var Any Parser = func(input []rune) *Tree {
 	return &Tree{Runes: input[:1]}
 }
 
-// Tagged returns a new parser that matches exactly what m matches. However, when m
-// matches, the parse tree is tagged with the specified tag instead of the Default.
-// Negative tags are reserved.
+// Tagged returns a new parser that matches exactly what p matches. However, when p
+// matches, the parse tree is tagged with the specified tag instead of the default (0).
 func (p Parser) Tagged(tag int) Parser {
 	return func(input []rune) *Tree {
 		tree := p(input)
@@ -78,23 +71,26 @@ func (p Parser) Tagged(tag int) Parser {
 }
 
 // LookingAt creates a new parser that matches the empty prefix if p matches input.
-// [LookingAt] is always Elided.  In regexp parlance, LookingAt is positive lookahead:
-//   Seq(X, LookingAt(Y))
-// is a parser that matches X, but only if it's followed by Y. 
+// LookingAt is used for positive lookahead:
+//
+//	Seq(X, LookingAt(Y))
+//
+// is a parser that matches X, but only if it's followed by Y.
 func LookingAt(p Parser) Parser {
 	return func(input []rune) *Tree {
 		t := p(input)
 		if t == nil {
 			return nil
 		}
-		return &Tree{Tag: ElideTag, Runes: input[:0]}
+		return &Tree{Runes: input[:0]}
 	}
 }
 
 // Not returns a new parser that fails if p matches, and matches an empty
-// slice if m fails. [Not] is automatically elided. In regexp parlance, Not 
-// implements negative lookahead:
-//   Seq(X, Not(Y))
+// slice if m fails. Not is used for negative lookahead:
+//
+//	Seq(X, Not(Y))
+//
 // is a parser that matches X, but only if it's not followed by Y.
 func Not(p Parser) Parser {
 	return func(input []rune) *Tree {
@@ -107,19 +103,6 @@ func Not(p Parser) Parser {
 	}
 }
 
-// Elide returns a new parser that matches p and marks the result as "elided".
-// Some combinators, such as [Seq], [OneOrMore], [ZeroOrMore] omit elided results
-// from their Children.  
-// 
-// E.g., if
-//	Seq(Exactly("("), Digits, Exactly(")")) 
-// succeeds, it returns a tree with three children. On the other hand,
-//	Seq(Exactly("(").Elide(), Digits, Exactly(")").Elide()) 
-// returns a tree with only one child, omitting the parentheses.
-func (p Parser) Elide() Parser {
-	return p.Tagged(ElideTag)
-}
-
 // Digit is a Parser that matches any single Unicode digit.
 var Digit Parser = func(input []rune) *Tree {
 	if len(input) > 0 && unicode.IsDigit(input[0]) {
@@ -128,7 +111,7 @@ var Digit Parser = func(input []rune) *Tree {
 	return nil
 }
 
-// Digits matches one or more unicode digits. 
+// Digits matches one or more unicode digits.
 var Digits Parser = func(input []rune) *Tree {
 	if len(input) == 0 || !unicode.IsDigit(input[0]) {
 		return nil
@@ -180,13 +163,13 @@ var Spaces Parser = func(input []rune) *Tree {
 	return &Tree{Runes: input[:pos]}
 }
 
-// WS matches zero or more whitespace runes. The result is always elided.
+// WS matches zero or more whitespace runes.
 var WS Parser = func(input []rune) *Tree {
 	pos := 0
 	for pos < len(input) && unicode.IsSpace(input[pos]) {
 		pos++
 	}
-	return &Tree{Tag: ElideTag, Runes: input[:pos]}
+	return &Tree{Runes: input[:pos]}
 }
 
 // Exactly returns a parser that succeeds when s is a prefix of the input.
@@ -243,11 +226,11 @@ func (p Parser) NonEmpty() Parser {
 	}
 }
 
-// Seq returns a Parser that matches a sequence of parsers, left-to-right.
+// Seq returns a Parser that matches a sequence of parser, left-to-right.
 // If it succeeds, the result will have one child for each parser that matches
 // and is not elided (see also [Parser.Elide]).
 //
-// If parsers is empty, Seq() succeeds with an empty prefix. 
+// If parser is empty, Seq() succeeds with an empty prefix.
 func Seq(parsers ...Parser) Parser {
 	return func(input []rune) *Tree {
 		pos := 0
@@ -258,7 +241,7 @@ func Seq(parsers ...Parser) Parser {
 				return nil
 			}
 			pos += len(t.Runes)
-			if t.Tag != ElideTag {
+			if t.Tag != 0 {
 				children = append(children, t)
 			}
 		}
@@ -266,9 +249,9 @@ func Seq(parsers ...Parser) Parser {
 	}
 }
 
-// FirstOf returns a parser that tries a series of parsers one after another until one
+// FirstOf returns a parser that tries a series of parser one after another until one
 // succeeds. The result is the result of the first parser that succeeds.
-// If the parsers all fail, the resulting parser fails.
+// If the parser all fail, the resulting parser fails.
 func FirstOf(parsers ...Parser) Parser {
 	return func(input []rune) *Tree {
 		for _, m := range parsers {
@@ -281,22 +264,20 @@ func FirstOf(parsers ...Parser) Parser {
 	}
 }
 
-// ZeroOrMore applied to a single parser matches that parser zero or more times. 
-// The result will have one child for every match. E.g., 
-//   ZeroOrMore(FirstOf(Exactly("foo"), Exactly("bar"))) ("foofoobar")
+// ZeroOrMore applied to a single parser matches that parser zero or more times.
+// The result will have one child for every match. E.g.,
+//
+//	ZeroOrMore(FirstOf(Exactly("foo"), Exactly("bar"))) ("foofoobar")
+//
 // will have three children matching ["foo", "foo", "bar"]
 //
-// Zero or more applied to a series of parsers matches the entire series zero or
+// Zero or more applied to a series of parser matches the entire series zero or
 // more times. E.g.,
-//   ZeroOrMore(Exactly("("), Digits, Exactly(")")) ("(123)(0)(123x)")
-// will match with six children: ["(", "123", ")", "(", "0", ")"]. The ending "(123x)"
-// does not match the entire series of parsers, so parsing stops before that.
 //
-// Any of the parameters that are elided [Parser.Elide] will be omitted from the result. 
-// E.g.,
-//   ZeroOrMore(Exactly("(").Elide(), Digits, Exactly(")").Elide()) ("(123)(0)(123x)")
-// will omit the parentheses and match with two children: ["123", "0"].
-//   
+//	ZeroOrMore(Exactly("("), Digits, Exactly(")")) ("(123)(0)(123x)")
+//
+// will match with six children: ["(", "123", ")", "(", "0", ")"]. The ending "(123x)"
+// does not match the entire series of parser, so parsing stops before that.
 func ZeroOrMore(parsers ...Parser) Parser {
 	return func(input []rune) *Tree {
 		pos := 0
@@ -310,7 +291,7 @@ func ZeroOrMore(parsers ...Parser) Parser {
 					return &Tree{Runes: input[:pos], Children: children}
 				}
 				seqPos += len(tree.Runes)
-				if tree.Tag != ElideTag {
+				if tree.Tag != 0 {
 					seq = append(seq, tree)
 				}
 			}
@@ -331,19 +312,20 @@ func OneOrMore(m ...Parser) Parser {
 			for _, parser := range m {
 				tree := parser(input[seqPos:])
 				if tree == nil {
-					if len(children) == 0 {
+					if pos == 0 {
 						return nil
 					}
 					return &Tree{Runes: input[:pos], Children: children}
 				}
 				seqPos += len(tree.Runes)
-				if tree.Tag != ElideTag {
+				if tree.Tag != 0 {
 					seq = append(seq, tree)
 				}
 			}
 			pos = seqPos
-			children = append(children, seq...)
+			if seq != nil {
+				children = append(children, seq...)
+			}
 		}
 	}
-
 }
