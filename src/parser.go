@@ -27,28 +27,6 @@ import (
 // what was matched.
 type Parser func(input []rune) *Tree
 
-// A Tree describes the result of applying a parser to an input.
-//
-// [Tree.Runes] contains the prefix of the input was matched by the parser.
-// It may be empty.
-//
-// [Tree.Children] contains tagged subtrees. E.g.,
-//
-//	Seq(Digits.Tagged(1), Exactly("."), Digits.Tagged(2))
-//
-// returns will return a tree with two children: the first for digits tagged 1,
-// the second for digits tagged 2.
-type Tree struct {
-	Runes    []rune
-	Children []*Tree
-	Tag      int
-}
-
-// String returns all the runes matched, including elisions.
-func (t *Tree) String() string {
-	return string(t.Runes)
-}
-
 // Any matches any single rune. Not(Any) is a good way to match the end of input.
 var Any Parser = func(input []rune) *Tree {
 	if len(input) == 0 {
@@ -57,9 +35,14 @@ var Any Parser = func(input []rune) *Tree {
 	return &Tree{Runes: input[:1]}
 }
 
-// Tagged returns a new parser that matches exactly what p matches. However, when p
-// matches, the parse tree is tagged with the specified tag instead of the default (0).
-func (p Parser) Tagged(tag int) Parser {
+// Tagged returns a new parser that matches exactly what p matches. However, if p
+// succeeds, the resulting parse tree will be tagged with the specified tag instead
+// of the default ("").
+func (p Parser) Tagged(tag string) Parser {
+	if p == nil {
+		panic("nil parser in Tagged")
+	}
+	
 	return func(input []rune) *Tree {
 		tree := p(input)
 		if tree == nil {
@@ -75,7 +58,7 @@ func (p Parser) Tagged(tag int) Parser {
 //
 //	Seq(X, LookingAt(Y))
 //
-// is a parser that matches X, but only if it's followed by Y.
+// is a parser that matches X, but only if it's followed by Y. 
 func LookingAt(p Parser) Parser {
 	return func(input []rune) *Tree {
 		t := p(input)
@@ -86,8 +69,8 @@ func LookingAt(p Parser) Parser {
 	}
 }
 
-// Not returns a new parser that fails if p matches, and matches an empty
-// slice if m fails. Not is used for negative lookahead:
+// Not returns a new parser that fails if p matches, and succeeds for an
+// empty prefix if m fails. Not is mostly used for negative lookahead:
 //
 //	Seq(X, Not(Y))
 //
@@ -214,8 +197,8 @@ func Optional(m Parser) Parser {
 	}
 }
 
-// NonEmpty returns a parser that matches m if m matches a non-empty prefix, otherwise fails.
-// NonEmpty is pointless unless m can match an empty prefix.
+// NonEmpty returns a parser that matches m if m matches a non-empty prefix,
+// otherwise fails. NonEmpty is pointless unless m can match an empty prefix.
 func (p Parser) NonEmpty() Parser {
 	return func(input []rune) *Tree {
 		t := p(input)
@@ -226,9 +209,12 @@ func (p Parser) NonEmpty() Parser {
 	}
 }
 
-// Seq returns a Parser that matches a sequence of parser, left-to-right.
-// If it succeeds, the result will have one child for each parser that matches
-// and is not elided (see also [Parser.Elide]).
+// Seq returns a [Parser] that matches a sequence of parsers, left-to-right.
+// If it succeeds, the result will have one child for each of the parameters
+// that are tagged. E.g., if
+//  Seq(Digits.Tagged("digits"), WS, Letters.Tagged("letters")
+// succeeds on some input, the result will have two children, the first tagged
+// "digits" and the second "letters".
 //
 // If parser is empty, Seq() succeeds with an empty prefix.
 func Seq(parsers ...Parser) Parser {
@@ -241,7 +227,7 @@ func Seq(parsers ...Parser) Parser {
 				return nil
 			}
 			pos += len(t.Runes)
-			if t.Tag != 0 {
+			if t.Tag != "" {
 				children = append(children, t)
 			}
 		}
@@ -291,7 +277,7 @@ func ZeroOrMore(parsers ...Parser) Parser {
 					return &Tree{Runes: input[:pos], Children: children}
 				}
 				seqPos += len(tree.Runes)
-				if tree.Tag != 0 {
+				if tree.Tag != "" {
 					seq = append(seq, tree)
 				}
 			}
@@ -318,7 +304,7 @@ func OneOrMore(m ...Parser) Parser {
 					return &Tree{Runes: input[:pos], Children: children}
 				}
 				seqPos += len(tree.Runes)
-				if tree.Tag != 0 {
+				if tree.Tag != "" {
 					seq = append(seq, tree)
 				}
 			}
@@ -329,3 +315,4 @@ func OneOrMore(m ...Parser) Parser {
 		}
 	}
 }
+

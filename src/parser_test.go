@@ -11,13 +11,33 @@ func TestExactly(t *testing.T) {
 		parser   Parser
 		expected *Tree
 	}{
-		{input: "hello world", parser: Exactly(""), expected: &Tree{Runes: []rune{}}},
-		{input: "hello world", parser: Exactly("hello"), expected: &Tree{Runes: []rune("hello")}},
-		{input: "hello world", parser: Exactly("hello "), expected: &Tree{Runes: []rune("hello ")}},
-		{input: "hello world", parser: Exactly("hello world globe"), expected: nil},
-		{input: "foo", parser: Exactly("foo"), expected: &Tree{Runes: []rune("foo")}},
-		{input: "", parser: Exactly("foo"), expected: nil},
-		{input: "", parser: Exactly(""), expected: &Tree{Runes: []rune("")}},
+		{
+			input:    "hello world",
+			parser:   Exactly(""),
+			expected: &Tree{Runes: []rune{}},
+		}, {
+			input:    "hello world",
+			parser:   Exactly("hello"),
+			expected: &Tree{Runes: []rune("hello")},
+		}, {
+			input:    "hello world",
+			parser:   Exactly("hello "),
+			expected: &Tree{Runes: []rune("hello ")},
+		}, {
+			input:    "hello world",
+			parser:   Exactly("hello world globe"),
+			expected: nil,
+		}, {
+			input:  "foo",
+			parser: Exactly("foo"), expected: &Tree{Runes: []rune("foo")},
+		}, {
+			input:  "",
+			parser: Exactly("foo"), expected: nil,
+		}, {
+			input:    "",
+			parser:   Exactly(""),
+			expected: &Tree{Runes: []rune("")},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
@@ -102,35 +122,35 @@ func TestSeq(t *testing.T) {
 			expected: &Tree{Runes: []rune{}, Children: []*Tree{}},
 		}, {
 			input:  "3xcde",
-			parser: Seq(Digit.Tagged(9), Exactly("x").Tagged(10)),
+			parser: Seq(Digit.Tagged("digits"), Exactly("x").Tagged("digits")),
 			expected: &Tree{
 				Runes: []rune("3x"),
 				Children: []*Tree{
-					{Runes: []rune{'3'}, Tag: 9},
-					{Runes: []rune{'x'}, Tag: 10},
+					{Runes: []rune{'3'}, Tag: "digits"},
+					{Runes: []rune{'x'}, Tag: "digits"},
 				},
 			},
 		}, {
 			input:  "3xcde",
-			parser: Seq(Digit.Tagged(1), Exactly("x")),
+			parser: Seq(Digit.Tagged("dig"), Exactly("x")),
 			expected: &Tree{
 				Runes: []rune("3x"),
 				Children: []*Tree{
-					{Runes: []rune{'3'}, Tag: 1},
+					{Runes: []rune{'3'}, Tag: "dig"},
 				},
 			},
 		}, {
 			input:  "foo314159xcde",
-			parser: Seq(Exactly("foo"), Digits.Tagged(1), Exactly("x")),
+			parser: Seq(Exactly("foo"), Digits.Tagged("digits"), Exactly("x")),
 			expected: &Tree{
 				Runes: []rune("foo314159x"),
 				Children: []*Tree{
-					{Runes: []rune("314159"), Tag: 1},
+					{Runes: []rune("314159"), Tag: "digits"},
 				},
 			},
 		}, {
 			input:    "314159xcde",
-			parser:   Seq(Exactly("foo"), Digits.Tagged(1), Exactly("x")),
+			parser:   Seq(Exactly("foo"), Digits.Tagged("dig"), Exactly("x")),
 			expected: nil,
 		},
 	}
@@ -194,23 +214,23 @@ func TestZeroOrMore(t *testing.T) {
 			},
 		}, {
 			input:  "1,2,3,",
-			parser: ZeroOrMore(Digit.Tagged(1), Exactly(",")),
+			parser: ZeroOrMore(Digit.Tagged("digit"), Exactly(",")),
 			result: &Tree{
 				Runes: []rune("1,2,3,"),
 				Children: []*Tree{
-					{Runes: []rune("1"), Tag: 1},
-					{Runes: []rune("2"), Tag: 1},
-					{Runes: []rune{'3'}, Tag: 1},
+					{Runes: []rune("1"), Tag: "digit"},
+					{Runes: []rune("2"), Tag: "digit"},
+					{Runes: []rune{'3'}, Tag: "digit"},
 				},
 			},
 		}, {
 			input:  "1,2,3",
-			parser: ZeroOrMore(Digit.Tagged(7), Exactly(",")),
+			parser: ZeroOrMore(Digit.Tagged("digit"), Exactly(",")),
 			result: &Tree{
 				Runes: []rune("1,2,"),
 				Children: []*Tree{
-					{Runes: []rune("1"), Tag: 7},
-					{Runes: []rune("2"), Tag: 7},
+					{Runes: []rune("1"), Tag: "digit"},
+					{Runes: []rune("2"), Tag: "digit"},
 				},
 			},
 		}, {
@@ -258,43 +278,43 @@ func TestOneOrMore(t *testing.T) {
 			},
 		}, {
 			input:  "1,2,3",
-			parser: OneOrMore(Digit.Tagged(2), Exactly(",")),
+			parser: OneOrMore(Digit.Tagged("d"), Exactly(",")),
 			result: &Tree{
 				Runes: []rune("1,2,"),
 				Children: []*Tree{
-					{Runes: []rune("1"), Tag: 2},
-					{Runes: []rune("2"), Tag: 2},
+					{Runes: []rune("1"), Tag: "d"},
+					{Runes: []rune("2"), Tag: "d"},
 				},
 			},
 		}, {
 			input:  "1,2,3",
-			parser: OneOrMore(Digit.Tagged(1), Exactly(",")),
+			parser: OneOrMore(Digit.Tagged("d"), Exactly(",")),
 			result: &Tree{
 				Runes: []rune("1,2,"),
 				Children: []*Tree{
-					{Runes: []rune("1"), Tag: 1},
-					{Runes: []rune("2"), Tag: 1},
+					{Runes: []rune("1"), Tag: "d"},
+					{Runes: []rune("2"), Tag: "d"},
 				},
 			},
 		}, {
 			input:  "1,2,3",
-			parser: OneOrMore(Digit.Tagged(1), Optional(Exactly(","))),
+			parser: OneOrMore(Digit.Tagged("digit"), Optional(Exactly(","))),
 			result: &Tree{
 				Runes: []rune("1,2,3"),
 				Children: []*Tree{
-					{Runes: []rune("1"), Tag: 1},
-					{Runes: []rune("2"), Tag: 1},
-					{Runes: []rune("3"), Tag: 1},
+					{Runes: []rune("1"), Tag: "digit"},
+					{Runes: []rune("2"), Tag: "digit"},
+					{Runes: []rune("3"), Tag: "digit"},
 				},
 			},
 		}, {
 			input:  "(123)(0)(234x)",
-			parser: ZeroOrMore(Exactly("("), Digits.Tagged(1), Exactly(")")),
+			parser: ZeroOrMore(Exactly("("), Digits.Tagged("digit"), Exactly(")")),
 			result: &Tree{
 				Runes: []rune("(123)(0)"),
 				Children: []*Tree{
-					{Runes: []rune("123"), Tag: 1},
-					{Runes: []rune("0"), Tag: 1},
+					{Runes: []rune("123"), Tag: "digit"},
+					{Runes: []rune("0"), Tag: "digit"},
 				},
 			},
 		},
@@ -346,14 +366,14 @@ func TestLookingAt(t *testing.T) {
 		{
 			input: "if then else",
 			parser: Seq(
-				Exactly("if").Tagged(9),
+				Exactly("if").Tagged("if"),
 				WS,
 				LookingAt(Exactly("then")),
 			),
 			expected: &Tree{
 				Runes: []rune("if "),
 				Children: []*Tree{
-					{Runes: []rune("if"), Tag: 9},
+					{Runes: []rune("if"), Tag: "if"},
 				},
 			},
 		},
@@ -361,17 +381,17 @@ func TestLookingAt(t *testing.T) {
 			input: "if then else",
 			parser: Seq(
 				WS,
-				Exactly("if").Tagged(9),
+				Exactly("if").Tagged("if"),
 				WS,
 				LookingAt(Exactly("th")),
-				Exactly("then").Tagged(11),
+				Exactly("then").Tagged("then"),
 				WS,
 			),
 			expected: &Tree{
 				Runes: []rune("if then "),
 				Children: []*Tree{
-					{Runes: []rune("if"), Tag: 9},
-					{Runes: []rune("then"), Tag: 11},
+					{Runes: []rune("if"), Tag: "if"},
+					{Runes: []rune("then"), Tag: "then"},
 				},
 			},
 		},
@@ -447,26 +467,26 @@ func TestLetters(t *testing.T) {
 			expected: &Tree{Runes: []rune("stitch")},
 		}, {
 			input:  "a stitch in time",
-			parser: ZeroOrMore(WS, Letters.Tagged(2)),
+			parser: ZeroOrMore(WS, Letters.Tagged("word")),
 			expected: &Tree{
 				Runes: []rune("a stitch in time"),
 				Children: []*Tree{
-					{Runes: []rune("a"), Tag: 2},
-					{Runes: []rune("stitch"), Tag: 2},
-					{Runes: []rune("in"), Tag: 2},
-					{Runes: []rune("time"), Tag: 2},
+					{Runes: []rune("a"), Tag: "word"},
+					{Runes: []rune("stitch"), Tag: "word"},
+					{Runes: []rune("in"), Tag: "word"},
+					{Runes: []rune("time"), Tag: "word"},
 				},
 			},
 		}, {
 			input:  "a stitch in time",
-			parser: OneOrMore(WS, Letters.Tagged(7)),
+			parser: OneOrMore(WS, Letters.Tagged("word")),
 			expected: &Tree{
 				Runes: []rune("a stitch in time"),
 				Children: []*Tree{
-					{Runes: []rune("a"), Tag: 7},
-					{Runes: []rune("stitch"), Tag: 7},
-					{Runes: []rune("in"), Tag: 7},
-					{Runes: []rune("time"), Tag: 7},
+					{Runes: []rune("a"), Tag: "word"},
+					{Runes: []rune("stitch"), Tag: "word"},
+					{Runes: []rune("in"), Tag: "word"},
+					{Runes: []rune("time"), Tag: "word"},
 				},
 			},
 		},
@@ -564,4 +584,55 @@ func TestIgnoreCase(t *testing.T) {
 			test.Eq(t, tt.expected, tt.parser([]rune(tt.input)))
 		})
 	}
+}
+
+func TestCombinations(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		parser   Parser
+		expected string
+	}{
+		{
+			name:  "comment",
+			input: "/* whatever goes in * here */",
+			parser: Seq(
+				Exactly("/*"),
+				ZeroOrMore(Not(Exactly("*/")), Any),
+				Exactly("*/"),
+			),
+			expected: "/* whatever goes in * here */",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			test.Eq(t, tt.expected, tt.parser([]rune(tt.input)).String())
+		})
+	}
+}
+
+func TestExpressionParser(t *testing.T) {
+	var Expr Parser
+	var Prod Parser
+	var Item Parser
+
+	Item = FirstOf(
+		Digits,
+		Seq(Exactly("("), Expr, Exactly(")")),
+	)
+	
+	Prod = Seq(
+		Item.Tagged("lhs"),
+		Exactly("*"),
+		Item.Tagged("rhs"),
+	).Tagged("*")
+	
+	var Sum Parser = Seq(
+		Prod.Tagged("lhs"),
+		Exactly("+"),
+		Prod.Tagged("rhs"),
+	).Tagged("+")
+
+	
+	test.Eq(t, "3+4", Sum([]rune("3+4")).String())
 }
