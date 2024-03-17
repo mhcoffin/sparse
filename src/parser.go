@@ -23,16 +23,56 @@ import (
 // followed by a decimal point followed by more digits. [Seq] returns a tree
 // that has one child for each parameter. (But see [Parser.Elide].)
 
-// Parser is a function that matches a prefix of input and returns a tree that indicates
+// A Parser is a function that either fails and returns nil,
+// or matches a prefix of input and returns a tree that indicates
 // what was matched.
 type Parser func(input []rune) *Tree
 
-// Any matches any single rune. Not(Any) is a good way to match the end of input.
+// Any returns a parser that matches any single rune.
 var Any Parser = func(input []rune) *Tree {
 	if len(input) == 0 {
 		return nil
 	}
 	return &Tree{Runes: input[:1]}
+}
+
+// OneOf matches any of the runes in s.
+func OneOf(s string) Parser {
+	// TODO: maybe use a bit map if the runes are all small.
+	m := make(map[rune]bool)
+	for _, c := range s {
+		m[c] = true
+	}
+	return func(input []rune) *Tree {
+		if len(input) == 0 {
+			return nil
+		}
+		_, ok := m[input[0]]
+		if ok {
+			return &Tree{Runes: input[:1]}
+		}
+		return nil
+	}
+}
+
+// ZeroOrMoreOf returns a parser that matches the longest prefix that consists
+// of runes that are in s.
+func ZeroOrMoreOf(s string) Parser {
+	// TODO: maybe use a bit map if the runes are all small.
+	m := make(map[rune]bool)
+	for _, c := range s {
+		m[c] = true
+	}
+	return func(input []rune) *Tree {
+		pos := 0
+		for pos < len(input) {
+			if _, ok := m[input[pos]]; !ok {
+				return &Tree{Runes: input[:pos]}
+			}
+			pos++
+		}
+		return &Tree{Runes: input}
+	}
 }
 
 // Tagged returns a new parser that matches exactly what p matches. However, if p
@@ -42,7 +82,7 @@ func (p Parser) Tagged(tag string) Parser {
 	if p == nil {
 		panic("nil parser in Tagged")
 	}
-	
+
 	return func(input []rune) *Tree {
 		tree := p(input)
 		if tree == nil {
@@ -53,12 +93,12 @@ func (p Parser) Tagged(tag string) Parser {
 	}
 }
 
-// LookingAt creates a new parser that matches the empty prefix if p matches input.
+// LookingAt returns a parser that matches the empty prefix if p matches the input.
 // LookingAt is used for positive lookahead:
 //
 //	Seq(X, LookingAt(Y))
 //
-// is a parser that matches X, but only if it's followed by Y. 
+// is a parser that matches X, but only if it's followed by Y.
 func LookingAt(p Parser) Parser {
 	return func(input []rune) *Tree {
 		t := p(input)
@@ -75,6 +115,10 @@ func LookingAt(p Parser) Parser {
 //	Seq(X, Not(Y))
 //
 // is a parser that matches X, but only if it's not followed by Y.
+//
+//	Not(Any)
+//
+// matches the end of input.
 func Not(p Parser) Parser {
 	return func(input []rune) *Tree {
 		tree := p(input)
@@ -212,12 +256,19 @@ func (p Parser) NonEmpty() Parser {
 // Seq returns a [Parser] that matches a sequence of parsers, left-to-right.
 // If it succeeds, the result will have one child for each of the parameters
 // that are tagged. E.g., if
-//  Seq(Digits.Tagged("digits"), WS, Letters.Tagged("letters")
+//
+//	Seq(Digits.Tagged("digits"), WS, Letters.Tagged("letters")
+//
 // succeeds on some input, the result will have two children, the first tagged
 // "digits" and the second "letters".
 //
 // If parser is empty, Seq() succeeds with an empty prefix.
 func Seq(parsers ...Parser) Parser {
+	for _, parser := range parsers {
+		if parser == nil {
+			panic("nil parser in Seq")
+		}
+	}
 	return func(input []rune) *Tree {
 		pos := 0
 		children := make([]*Tree, 0, len(parsers))
@@ -251,19 +302,30 @@ func FirstOf(parsers ...Parser) Parser {
 }
 
 // ZeroOrMore applied to a single parser matches that parser zero or more times.
-// The result will have one child for every match. E.g.,
+// The result will have one child for every match that is [Tagged]. E.g.,
 //
-//	ZeroOrMore(FirstOf(Exactly("foo"), Exactly("bar"))) ("foofoobar")
+//	ZeroOrMore(FirstOf(Letters.Tagged("word"), Digits.Tagged("number")))
 //
-// will have three children matching ["foo", "foo", "bar"]
+// when applied to "first123second456" will have four children:
 //
-// Zero or more applied to a series of parser matches the entire series zero or
+//	     {Tag: "word", Runes: []rune("first")},
+//			{Tag: "number", Runes: []rune("123")},
+//			{Tag: "word", Runes: []rune("second")},
+//			{Tag: "number", Runes: []rune("456")},
+//
+// When applied to ",first123", it will match the empty prefix and have no children.
+//
+// Zero or more applied to a series of parsers matches the entire series zero or
 // more times. E.g.,
 //
-//	ZeroOrMore(Exactly("("), Digits, Exactly(")")) ("(123)(0)(123x)")
+//	ZeroOrMore(Exactly("number"), Digits.Tagged("number"))
 //
-// will match with six children: ["(", "123", ")", "(", "0", ")"]. The ending "(123x)"
-// does not match the entire series of parser, so parsing stops before that.
+// when applied to "number17number11number" will have two children:
+//
+//	{Tag: "number", Runes: []rune("17")},
+//	{Tag: "number", Runes: []rune("11")},
+//
+// The trailing "number" is left unmatched since it is not followed by digits.
 func ZeroOrMore(parsers ...Parser) Parser {
 	return func(input []rune) *Tree {
 		pos := 0
@@ -282,7 +344,9 @@ func ZeroOrMore(parsers ...Parser) Parser {
 				}
 			}
 			pos = seqPos
-			children = append(children, seq...)
+			if seq != nil {
+				children = append(children, seq...)
+			}
 		}
 	}
 }
@@ -314,5 +378,59 @@ func OneOrMore(m ...Parser) Parser {
 			}
 		}
 	}
+}
+
+// Deref provides a way to break dependency loops.
+// E.g.,
+//
+//	var Foo Parser
+//	Expr = FirstOf(
+//	  Seq(Digits,
+//	  Not(Exactly("+"))),
+//	  Seq(Digits, Exactly("+"), Deref(&Expr)))
+func Deref(x *Parser) Parser {
+	return func(input []rune) *Tree {
+		if x == nil {
+			panic("Deref used with nil parser")
+		}
+		return (*x)(input)
+	}
+}
+
+// A MultiParser is a function that returns an array of
+// possible matches for input.
+type MultiParser func(input []rune) []*Tree
+
+// Alt tries all of parses and returns their results.
+func Alt(parsers ...Parser) MultiParser{
+	return func(input []rune) []*Tree {
+		result := make([]*Tree, len(parsers))
+		for k, parser := range parsers {
+			result[k] = parser(input)
+		}
+		return result
+	}
+}
+
+// Longest returns a parser that extracts the longest match 
+// from mp(input).
+func Longest(mp MultiParser) Parser {
+	var p Parser = func(input []rune) *Tree {
+		results := mp(input)
+		var longest *Tree
+		var length = 0
+		for _, result := range results {
+			if result != nil && len(result.Runes) > length {
+				longest = result
+				length = len(result.Runes)
+			}
+		}
+		return longest
+	}
+	return p
+}
+
+func MultiSeq(mp ...MultiParser) MultiParser {
+	
 }
 
