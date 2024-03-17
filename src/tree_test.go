@@ -161,7 +161,7 @@ func TestTree_Nil(t *testing.T) {
 
 func TestTree_String(t *testing.T) {
 	tests := []struct {
-		tree *Tree
+		tree     *Tree
 		expected string
 	}{
 		{tree: &Tree{Tag: "top", Runes: []rune("foobar")}, expected: "foobar"},
@@ -183,8 +183,7 @@ func TestNonEmpty(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			
+
 		})
 	}
 }
-

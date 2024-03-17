@@ -41,7 +41,7 @@ func TestExactly(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-
+			test.Eq(t, tt.expected, tt.parser([]rune(tt.input)))
 		})
 	}
 }
@@ -104,6 +104,36 @@ func TestAny(t *testing.T) {
 			test.Eq(t, tt.expected, Any([]rune(tt.input)))
 		})
 	}
+}
+
+func TestAnyOf(t *testing.T) {
+	testCases := []struct {
+		input    string
+		parser   Parser
+		expected string
+	}{
+		{
+			input:    "0234",
+			parser:   OneOf("0123456789abcdef"),
+			expected: "0",
+		},
+		{
+			input:    "f",
+			parser:   OneOf("0123456789abcdef"),
+			expected: "f",
+		},
+		{
+			input:    "g",
+			parser:   OneOf("0123456789abcdef"),
+			expected: "",
+		},
+	}
+	for _, tt := range testCases {
+		t.Run(tt.input, func(t *testing.T) {
+			test.Eq(t, tt.expected, tt.parser([]rune(tt.input)).String())
+		})
+	}
+
 }
 
 func TestSeq(t *testing.T) {
@@ -611,28 +641,43 @@ func TestCombinations(t *testing.T) {
 	}
 }
 
-func TestExpressionParser(t *testing.T) {
-	var Expr Parser
-	var Prod Parser
-	var Item Parser
+func TestFoo(t *testing.T) {
+	m := ZeroOrMore(FirstOf(Letters.Tagged("word"), Digits.Tagged("number")))([]rune("first123second456"))
+	test.Eq(t, []*Tree{
+		{Tag: "word", Runes: []rune("first")},
+		{Tag: "number", Runes: []rune("123")},
+		{Tag: "word", Runes: []rune("second")},
+		{Tag: "number", Runes: []rune("456")},
+	}, m.Children)
 
-	Item = FirstOf(
-		Digits,
-		Seq(Exactly("("), Expr, Exactly(")")),
-	)
-	
-	Prod = Seq(
-		Item.Tagged("lhs"),
-		Exactly("*"),
-		Item.Tagged("rhs"),
-	).Tagged("*")
-	
-	var Sum Parser = Seq(
-		Prod.Tagged("lhs"),
-		Exactly("+"),
-		Prod.Tagged("rhs"),
-	).Tagged("+")
+	z := ZeroOrMore(FirstOf(Letters.Tagged("word"), Digits.Tagged("number")))([]rune(",first123"))
+	test.Eq(t, &Tree{Runes: []rune{}}, z)
 
-	
-	test.Eq(t, "3+4", Sum([]rune("3+4")).String())
+	n := ZeroOrMore(Exactly("number"), Digits.Tagged("number"))([]rune("number17number11number"))
+	test.Eq(t, []*Tree{
+		{Tag: "number", Runes: []rune("17")},
+		{Tag: "number", Runes: []rune("11")},
+	}, n.Children)
+}
+
+func TestZeroOrMoreOf(t *testing.T) {
+	tests := []struct {
+		parser   Parser
+		input    string
+		expected string
+	}{
+		{parser: ZeroOrMoreOf("abcde"), input: "", expected: ""},
+		{parser: ZeroOrMoreOf("abcde"), input: "abghi", expected: "ab"},
+		{parser: ZeroOrMoreOf("abcde"), input: "aaaaaaaaaaa", expected: "aaaaaaaaaaa"},
+		{parser: ZeroOrMoreOf(""), input: "aaaaaaaaaaa", expected: ""},
+		{parser: ZeroOrMoreOf("✍️∰"), input: "aaaaaaaaaaa", expected: ""},
+		{parser: ZeroOrMoreOf("✍️∰a"), input: "aaaaaaaaaaa✍️ghi", expected: "aaaaaaaaaaa✍️"},
+		{parser: ZeroOrMoreOf("✍️∰a"), input: "✍️∰✍️∰∰", expected: "✍️∰✍️∰∰"},
+		{parser: ZeroOrMoreOf("✍️∰a"), input: "✍️∰✍️∰∰xyzzy", expected: "✍️∰✍️∰∰"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			test.Eq(t, []rune(tt.expected), tt.parser([]rune(tt.input)).Runes)
+		})
+	}
 }
