@@ -397,40 +397,4 @@ func Deref(x *Parser) Parser {
 	}
 }
 
-// A MultiParser is a function that returns an array of
-// possible matches for input.
-type MultiParser func(input []rune) []*Tree
-
-// Alt tries all of parses and returns their results.
-func Alt(parsers ...Parser) MultiParser{
-	return func(input []rune) []*Tree {
-		result := make([]*Tree, len(parsers))
-		for k, parser := range parsers {
-			result[k] = parser(input)
-		}
-		return result
-	}
-}
-
-// Longest returns a parser that extracts the longest match 
-// from mp(input).
-func Longest(mp MultiParser) Parser {
-	var p Parser = func(input []rune) *Tree {
-		results := mp(input)
-		var longest *Tree
-		var length = 0
-		for _, result := range results {
-			if result != nil && len(result.Runes) > length {
-				longest = result
-				length = len(result.Runes)
-			}
-		}
-		return longest
-	}
-	return p
-}
-
-func MultiSeq(mp ...MultiParser) MultiParser {
-	
-}
 
