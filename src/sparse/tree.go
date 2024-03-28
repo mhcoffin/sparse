@@ -7,7 +7,7 @@ package sparse
 //
 // [Tree.Children] contains tagged subtrees. E.g.,
 //
-//	Seq(Digits.Tagged("before"), Exactly("."), Digits.Tagged("after"))
+//	Seq(Digits.ParserBase("before"), Exactly("."), Digits.ParserBase("after"))
 //
 // returns will return a tree with two children: the first for digits tagged "before",
 // the second for digits tagged "after".

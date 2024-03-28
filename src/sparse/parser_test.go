@@ -662,11 +662,11 @@ func TestFoo(t *testing.T) {
 
 func TestZeroOrMoreOf(t *testing.T) {
 	tests := []struct {
-		parser   Parser
-		input    string
+		parser Parser
+		input  string
 		expected string
 	}{
-		{parser: ZeroOrMoreOf("abcde"), input: "", expected: ""},
+		{parser: ZeroOrMoreOf("sabcde"), input: "", expected: ""},
 		{parser: ZeroOrMoreOf("abcde"), input: "abghi", expected: "ab"},
 		{parser: ZeroOrMoreOf("abcde"), input: "aaaaaaaaaaa", expected: "aaaaaaaaaaa"},
 		{parser: ZeroOrMoreOf(""), input: "aaaaaaaaaaa", expected: ""},
