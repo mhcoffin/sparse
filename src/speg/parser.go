@@ -7,10 +7,10 @@ import (
 
 // A Tree describes the result of matching some input.
 type Tree struct {
-	MatchedRunes    []rune
-	MatchStartIndex int
-	Subtree         []*Tree
-	Tag             string
+	Start    int
+	Match    []rune
+	Children []*Tree
+	Tag      string
 }
 
 type ID = uuid.UUID
@@ -20,7 +20,7 @@ type ID = uuid.UUID
 type Cache = map[uuid.UUID]map[int]*Tree
 
 func NewCache() Cache {
-	return make(map[ID]map[int]*Tree )
+	return make(map[ID]map[int]*Tree)
 }
 
 // A Parser is a thing that matches its input beginning at start and returns a Tree
@@ -30,9 +30,14 @@ type Parser interface {
 	// nil if it fails to match.
 	Parse(input []rune, start int, cache Cache) *Tree
 
-	// GetMatchID returns the match ID for this parser. Two parsers with the same
-	// Match ID must produce the same result.
-	GetMatchID() uuid.UUID
+	// ID returns the unique ID for this parser.
+	ID() uuid.UUID
+
+	// Tag returns the tag of this parser.
+	Tag() string
+
+	// Tagged returns a new parser (with a new ID) that tags its results with tag.
+	Tagged(tag string) Parser
 }
 
 // A MatchingFunc is a function that tries to match a prefix of its input.
@@ -44,12 +49,11 @@ type TagField struct {
 	tag string
 }
 
-// A Matcher is a parser that employs a MatchingFunc to scan input and tags
-// its result Tree with tag.
+// A Matcher is a parser that employs a MatchingFunc to scan input.
 type Matcher struct {
 	TagField
-	id      ID
-	matcher MatchingFunc
+	id           ID
+	matchingFunc MatchingFunc
 }
 
 // getCache returns the cache for Matcher, creating a new one if necessary.
@@ -68,36 +72,41 @@ func (m Matcher) Parse(input []rune, start int, cache Cache) *Tree {
 	if isCached {
 		return cachedResult
 	}
-	tree := m.matcher(input[start:])
+	tree := m.matchingFunc(input[start:])
 	if tree == nil {
 		myCache[start] = nil
 		return nil
 	}
-	tree.MatchStartIndex = start
+	tree.Start = start
 	tree.Tag = m.tag
 	myCache[start] = tree
 	return tree
 }
 
-func (m Matcher) GetMatchID() uuid.UUID {
+func (m Matcher) ID() uuid.UUID {
 	return m.id
 }
 
-// WithTag returns a new matcher that tags result trees with tag.
-func (m Matcher) WithTag(tag string) Matcher {
+func (m Matcher) Tag() string {
+	return m.tag
+}
+
+// Tagged returns a new Matcher that parses exactly what m does, but
+// tags result trees with tag.
+func (m Matcher) Tagged(tag string) Parser {
 	return Matcher{
-		TagField: TagField{tag: tag},
-		id:       m.id,
-		matcher:  m.matcher,
+		TagField:     TagField{tag: tag},
+		id:           m.id,
+		matchingFunc: m.matchingFunc,
 	}
 }
 
-// NewMatcher creates a matcher from a MatcherFunc.
+// NewMatcher creates a matchingFunc from a MatcherFunc.
 // Distinct calls to NewMatcher produce different IDs.
 func NewMatcher(m MatchingFunc) Matcher {
 	return Matcher{
-		id:      uuid.New(),
-		matcher: m,
+		id:           uuid.New(),
+		matchingFunc: m,
 	}
 }
 
@@ -108,19 +117,21 @@ func Any() Matcher {
 			return nil
 		}
 		return &Tree{
-			MatchedRunes: input[:1],
+			Match: input[:1],
 		}
 	})
 	return result
 }
 
+// Letter matches any single unicode letter. If fails if the first
+// rune in the input is not a letter.
 func Letter() Matcher {
 	return NewMatcher(func(input []rune) *Tree {
 		if len(input) == 0 || !unicode.IsLetter(input[0]) {
 			return nil
 		}
 		return &Tree{
-			MatchedRunes: input[:1],
+			Match: input[:1],
 		}
 	})
 }
@@ -134,14 +145,14 @@ func OneOrMoreLetters() Matcher {
 					return nil
 				}
 				return &Tree{
-					MatchedRunes: input[:k],
+					Match: input[:k],
 				}
 			}
 		}
 		if len(input) == 0 {
 			return nil
 		}
-		return &Tree{MatchedRunes: input}
+		return &Tree{Match: input}
 	})
 }
 
@@ -152,7 +163,7 @@ func Digit() Matcher {
 			return nil
 		}
 		return &Tree{
-			MatchedRunes: input[:1],
+			Match: input[:1],
 		}
 	})
 }
@@ -165,24 +176,37 @@ func OneOrMoreDigits() Matcher {
 					return nil
 				}
 				return &Tree{
-					MatchedRunes: input[:k],
+					Match: input[:k],
 				}
 			}
 		}
 		if len(input) == 0 {
 			return nil
 		}
-		return &Tree{MatchedRunes: input}
+		return &Tree{Match: input}
 	})
 }
 
 type FirstOfParser struct {
 	id         uuid.UUID
 	subParsers []Parser
+	TagField
 }
 
-func (p FirstOfParser) Id() uuid.UUID {
+func (p FirstOfParser) ID() uuid.UUID {
 	return p.id
+}
+
+func (p FirstOfParser) Tag() string {
+	return p.tag
+}
+
+func (p FirstOfParser) Tagged(tag string) Parser {
+	return FirstOfParser{
+		id:         uuid.New(),
+		subParsers: p.subParsers,
+		TagField:   TagField{tag: tag},
+	}
 }
 
 func (p FirstOfParser) Parse(input []rune, start int, cache Cache) *Tree {
@@ -192,10 +216,26 @@ func (p FirstOfParser) Parse(input []rune, start int, cache Cache) *Tree {
 		return myResult
 	}
 	for _, parser := range p.subParsers {
-		result := parser.Parse(input, start, cache)
-		if result != nil {
-			myCache[start] = result
-			return result
+		try := parser.Parse(input, start, cache)
+		if try != nil {
+			if try.Tag == "" {
+				result := &Tree{
+					Start: start,
+					Match: try.Match,
+					Tag:   p.tag,
+				}
+				myCache[start] = result
+				return result
+			} else {
+				result := &Tree{
+					Start:    start,
+					Match:    try.Match,
+					Children: []*Tree{try},
+					Tag:      p.tag,
+				}
+				myCache[start] = result
+				return result
+			}
 		}
 	}
 	myCache[start] = nil
@@ -203,8 +243,8 @@ func (p FirstOfParser) Parse(input []rune, start int, cache Cache) *Tree {
 }
 
 // FirstOf returns the result from the first of parsers that succeeds, or
-// nil if none of them do. FirstOf does not create its own parser tree. It
-// just directly returns the result from parsers.
+// nil if none of them do. If it succeeds, it will have one child: the match
+// that succeeded.
 func FirstOf(parsers ...Parser) FirstOfParser {
 	return FirstOfParser{
 		id:         uuid.New(),
@@ -215,10 +255,10 @@ func FirstOf(parsers ...Parser) FirstOfParser {
 type SequenceParser struct {
 	id         uuid.UUID
 	subParsers []Parser
-	tag        string
+	TagField
 }
 
-func (p SequenceParser) GetMatchID() uuid.UUID {
+func (p SequenceParser) ID() uuid.UUID {
 	return p.id
 }
 
@@ -227,20 +267,20 @@ func (p SequenceParser) Id() uuid.UUID {
 	return p.id
 }
 
+func (p SequenceParser) Tag() string {
+	return p.tag
+}
+
 // Tagged returns a new SequenceParser that tags its results with tag.
-func (p SequenceParser) Tagged(tag string) SequenceParser {
+func (p SequenceParser) Tagged(tag string) Parser {
 	return SequenceParser{
 		id:         uuid.New(),
 		subParsers: p.subParsers,
-		tag:        tag,
+		TagField:   TagField{tag},
 	}
 }
 
-// Parse matches the input starting from start, using the sub-parsers of the SequenceParser.
-// It returns a Tree describing the result if the match is successful, or nil otherwise.
-// The result Tree contains the matched runes, the starting index of the match,
-// and any sub-parsers that tag their results.
-// The top-level tree will be tagged with the p's tag.
+// Parse matches a sequence of parsers.
 func (p SequenceParser) Parse(input []rune, start int, cache Cache) *Tree {
 	var position = start
 	var subtrees []*Tree
@@ -249,21 +289,21 @@ func (p SequenceParser) Parse(input []rune, start int, cache Cache) *Tree {
 		if result == nil {
 			return nil
 		}
-		position += len(result.MatchedRunes)
+		position += len(result.Match)
 		if result.Tag != "" {
 			subtrees = append(subtrees, result)
 		}
 	}
 
 	return &Tree{
-		MatchedRunes:    input[start:position],
-		MatchStartIndex: start,
-		Subtree:         subtrees,
-		Tag: p.tag,
+		Match:    input[start:position],
+		Start:    start,
+		Children: subtrees,
+		Tag:      p.tag,
 	}
 }
 
-// Sequence returns a parser that succeeds if all of its subparsers succeed in sequence.
+// Sequence returns a parser that succeeds if all of its sub-parsers succeed in sequence.
 func Sequence(parsers ...Parser) SequenceParser {
 	return SequenceParser{
 		id:         uuid.New(),
@@ -271,11 +311,57 @@ func Sequence(parsers ...Parser) SequenceParser {
 	}
 }
 
-func (p SequenceParser) WithTag(tag string) SequenceParser {
-	return SequenceParser{
-		id:         uuid.New(),
-		subParsers: p.subParsers,
-		tag:        tag,
+type OptionalParser struct {
+	id     uuid.UUID
+	parser Parser
+	TagField
+}
+
+func (o OptionalParser) Parse(input []rune, start int, cache Cache) *Tree {
+	tree := o.parser.Parse(input, start, cache)
+	if tree == nil {
+		return &Tree{
+			Start:    start,
+			Match:    input[:0],
+			Children: nil,
+			Tag:      o.tag,
+		}
+	} else if tree.Tag != "" {
+		return &Tree{
+			Start:    start,
+			Match:    tree.Match,
+			Children: []*Tree{tree},
+			Tag:      o.tag,
+		}
+	} else {
+		return &Tree{
+			Start: start,
+			Match: tree.Match,
+			Tag:   o.tag,
+		}
 	}
 }
 
+func (o OptionalParser) Tagged(tag string) Parser {
+	return &OptionalParser{
+		id:       uuid.New(),
+		parser:   o.parser,
+		TagField: TagField{tag: tag},
+	}
+}
+
+func (o OptionalParser) ID() uuid.UUID {
+	return o.id
+}
+
+func (o OptionalParser) Tag() string {
+	return o.tag
+}
+
+// Opt optionally matches parser.
+func Opt(parser Parser) Parser {
+	return OptionalParser{
+		id:     uuid.New(),
+		parser: parser,
+	}
+}
