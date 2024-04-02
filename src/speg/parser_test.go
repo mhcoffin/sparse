@@ -38,14 +38,14 @@ func TestAny(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			matcher := Any().Tagged("tt.tag")
-			cache := make(Cache)
-			tree := matcher.Parse(tt.input, 0, cache)
+			context := NewContext()
+			tree := matcher.Parse(tt.input, 0, context)
 			if tt.expected != nil && tree != nil {
 				tt.expected.Start = 0
 				tt.expected.Tag = matcher.Tag()
 			}
 			test.Eq(t, tt.expected, tree)
-			matcherCache, _ := cache[matcher.ID()]
+			matcherCache, _ := context.cache[matcher.ID()]
 			test.NotNil(t, matcherCache)
 			cachedTree, ok := matcherCache[0]
 			test.True(t, ok)
@@ -95,8 +95,8 @@ func TestOneOrMoreLetters(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			match := OneOrMoreLetters().Tagged(tt.name)
-			cache := make(map[ID]map[int]*Tree)
-			got := match.Parse(tt.input, 0, cache)
+			context := NewContext()
+			got := match.Parse(tt.input, 0, context)
 			test.Eq(t, tt.want, got)
 		})
 	}
@@ -131,7 +131,7 @@ func TestLetter(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := Letter().Parse(tt.input, 0, make(Cache))
+			got := Letter().Parse(tt.input, 0, NewContext())
 			test.Eq(t, tt.want, got)
 		})
 	}
@@ -179,7 +179,7 @@ func TestOneOrMoreDigits(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			matcher := OneOrMoreDigits().Tagged(tt.name)
-			got := matcher.Parse(tt.input, 0, NewCache())
+			got := matcher.Parse(tt.input, 0, NewContext())
 			test.Eq(t, tt.want, got)
 		})
 	}
@@ -216,7 +216,7 @@ func TestDigit(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			mat := Digit()
-			got := mat.Parse(tc.input, 0, NewCache())
+			got := mat.Parse(tc.input, 0, NewContext())
 			test.Eq(t, tc.want, got)
 		})
 	}
@@ -279,7 +279,7 @@ func TestSequenceParser_Parse(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			seqParser := tc.parsers
 			inputRunes := []rune(tc.inputString)
-			result := seqParser.Parse(inputRunes, tc.start, NewCache())
+			result := seqParser.Parse(inputRunes, tc.start, NewContext())
 			test.Eq(t, tc.expectedResult, result)
 		})
 	}
@@ -384,7 +384,7 @@ func TestFirstOf(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := tc.parser.Parse([]rune(tc.input), tc.start, NewCache())
+			result := tc.parser.Parse([]rune(tc.input), tc.start, NewContext())
 			test.Eq(t, tc.expected, result)
 		})
 	}
@@ -426,8 +426,8 @@ func TestOpt(t *testing.T) {
 			},
 		},
 		{
-			name: "sub-parser fails",
-			input: []rune("abcdef"),
+			name:   "sub-parser fails",
+			input:  []rune("abcdef"),
 			parser: Opt(OneOrMoreDigits()),
 			expected: &Tree{
 				Start: 0,
@@ -447,8 +447,31 @@ func TestOpt(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := tc.parser.Parse(tc.input, tc.start, NewCache())
+			result := tc.parser.Parse(tc.input, tc.start, NewContext())
 			test.Eq(t, tc.expected, result)
 		})
 	}
+}
+
+
+func TestLeftRecursion(t *testing.T) {
+	var base = FirstOf(
+		OneOrMoreLetters().Tagged("var"),
+		OneOrMoreDigits().Tagged("num"),
+	).Tagged("")
+
+	iterm := Indirect()
+	var term = FirstOf(
+		Sequence(
+			iterm.Tagged("lhs"),
+			Exactly("*"),
+			iterm.Tagged("rhs"),
+		).Tagged("s"),
+		base,
+	).Tagged("term")
+	iterm.Set(&term)
+
+	tree := term.Parse([]rune("foobar*37"), 0, NewContext())
+	test.Eq(t, "(first:term (seq:s [&term] `*` [&term]) (first letter+:var digit+:num))", term.String())
+	test.Eq(t, "foobar*37", tree.Matched())
 }
