@@ -80,7 +80,7 @@ func ZeroOrMoreOf(s string) Parser {
 // of the default ("").
 func (p Parser) Tagged(tag string) Parser {
 	if p == nil {
-		panic("nil parser in Tagged")
+		panic("nil parser in ParserBase")
 	}
 
 	return func(input []rune) *Tree {
@@ -257,7 +257,7 @@ func (p Parser) NonEmpty() Parser {
 // If it succeeds, the result will have one child for each of the parameters
 // that are tagged. E.g., if
 //
-//	Seq(Digits.Tagged("digits"), WS, Letters.Tagged("letters")
+//	Seq(Digits.ParserBase("digits"), WS, Letters.ParserBase("letters")
 //
 // succeeds on some input, the result will have two children, the first tagged
 // "digits" and the second "letters".
@@ -302,9 +302,9 @@ func FirstOf(parsers ...Parser) Parser {
 }
 
 // ZeroOrMore applied to a single parser matches that parser zero or more times.
-// The result will have one child for every match that is [Tagged]. E.g.,
+// The result will have one child for every match that is [ParserBase]. E.g.,
 //
-//	ZeroOrMore(FirstOf(Letters.Tagged("word"), Digits.Tagged("number")))
+//	ZeroOrMore(FirstOf(Letters.ParserBase("word"), Digits.ParserBase("number")))
 //
 // when applied to "first123second456" will have four children:
 //
@@ -318,7 +318,7 @@ func FirstOf(parsers ...Parser) Parser {
 // Zero or more applied to a series of parsers matches the entire series zero or
 // more times. E.g.,
 //
-//	ZeroOrMore(Exactly("number"), Digits.Tagged("number"))
+//	ZeroOrMore(Exactly("number"), Digits.ParserBase("number"))
 //
 // when applied to "number17number11number" will have two children:
 //
@@ -397,40 +397,4 @@ func Deref(x *Parser) Parser {
 	}
 }
 
-// A MultiParser is a function that returns an array of
-// possible matches for input.
-type MultiParser func(input []rune) []*Tree
-
-// Alt tries all of parses and returns their results.
-func Alt(parsers ...Parser) MultiParser{
-	return func(input []rune) []*Tree {
-		result := make([]*Tree, len(parsers))
-		for k, parser := range parsers {
-			result[k] = parser(input)
-		}
-		return result
-	}
-}
-
-// Longest returns a parser that extracts the longest match 
-// from mp(input).
-func Longest(mp MultiParser) Parser {
-	var p Parser = func(input []rune) *Tree {
-		results := mp(input)
-		var longest *Tree
-		var length = 0
-		for _, result := range results {
-			if result != nil && len(result.Runes) > length {
-				longest = result
-				length = len(result.Runes)
-			}
-		}
-		return longest
-	}
-	return p
-}
-
-func MultiSeq(mp ...MultiParser) MultiParser {
-	
-}
 
