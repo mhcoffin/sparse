@@ -29,7 +29,8 @@ func TestExactly(t *testing.T) {
 			expected: nil,
 		}, {
 			input:  "foo",
-			parser: Exactly("foo"), expected: &Tree{Runes: []rune("foo")},
+			parser: Exactly("foo"), 
+			expected: &Tree{Runes: []rune("foo")},
 		}, {
 			input:  "",
 			parser: Exactly("foo"), expected: nil,
@@ -41,7 +42,7 @@ func TestExactly(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			test.Eq(t, tt.expected, tt.parser([]rune(tt.input)))
+			test.Eq(t, tt.expected.String(), tt.parser([]rune(tt.input)).String())
 		})
 	}
 }

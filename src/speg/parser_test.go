@@ -9,47 +9,26 @@ func TestAny(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    []rune
-		tag      string
-		expected *Tree
+		parser   Parser
+		expected string
 	}{
 		{
 			name:     "EmptyInput",
 			input:    []rune(""),
-			tag:      "",
-			expected: nil,
+			parser:   Any(),
+			expected: `<nil>`,
 		},
 		{
 			name:     "OneInput",
 			input:    []rune("a"),
-			tag:      "",
-			expected: &Tree{Match: []rune("a")},
-		},
-		{
-			name:  "TaggedOption",
-			input: []rune("b"),
-			tag:   "testTag",
-			expected: &Tree{
-				Match: []rune("b"),
-				Tag:   "testTag",
-			},
+			parser:   Any(),
+			expected: `"a"`,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			matcher := Any().Tagged("tt.tag")
-			context := NewContext()
-			tree := matcher.Parse(tt.input, 0, context)
-			if tt.expected != nil && tree != nil {
-				tt.expected.Start = 0
-				tt.expected.Tag = matcher.Tag()
-			}
-			test.Eq(t, tt.expected, tree)
-			matcherCache, _ := context.cache[matcher.ID()]
-			test.NotNil(t, matcherCache)
-			cachedTree, ok := matcherCache[0]
-			test.True(t, ok)
-			test.Eq(t, tree, cachedTree)
+			test.Eq(t, tt.expected, tt.parser.Parse(tt.input, 0, NewContext()).String())
 		})
 	}
 }
@@ -94,7 +73,7 @@ func TestOneOrMoreLetters(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			match := OneOrMoreLetters().Tagged(tt.name)
+			match := Letters().Tagged(tt.name)
 			context := NewContext()
 			got := match.Parse(tt.input, 0, context)
 			test.Eq(t, tt.want, got)
@@ -178,7 +157,7 @@ func TestOneOrMoreDigits(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			matcher := OneOrMoreDigits().Tagged(tt.name)
+			matcher := Digits().Tagged(tt.name)
 			got := matcher.Parse(tt.input, 0, NewContext())
 			test.Eq(t, tt.want, got)
 		})
@@ -223,8 +202,8 @@ func TestDigit(t *testing.T) {
 }
 
 func TestSequenceParser_Parse(t *testing.T) {
-	digitParser := OneOrMoreDigits().Tagged("digits")
-	letterParser := OneOrMoreLetters().Tagged("letters")
+	digitParser := Digits().Tagged("digits")
+	letterParser := Letters().Tagged("letters")
 
 	testCases := []struct {
 		name           string
@@ -235,7 +214,7 @@ func TestSequenceParser_Parse(t *testing.T) {
 	}{
 		{
 			name:        "Single parser matches",
-			parsers:     Sequence(digitParser),
+			parsers:     Seq(digitParser),
 			inputString: "123",
 			expectedResult: &Tree{Match: []rune("123"), Children: []*Tree{
 				{Match: []rune("123"), Tag: "digits"},
@@ -243,7 +222,7 @@ func TestSequenceParser_Parse(t *testing.T) {
 		},
 		{
 			name:        "Both parsers match",
-			parsers:     Sequence(digitParser, letterParser).Tagged("test"),
+			parsers:     Seq(digitParser, letterParser).Tagged("test"),
 			inputString: "123abc",
 			expectedResult: &Tree{Match: []rune("123abc"), Tag: "test", Children: []*Tree{
 				{Match: []rune("123"), Tag: "digits", Start: 0},
@@ -252,19 +231,19 @@ func TestSequenceParser_Parse(t *testing.T) {
 		},
 		{
 			name:           "Mismatch in parsers order",
-			parsers:        Sequence(digitParser, letterParser),
+			parsers:        Seq(digitParser, letterParser),
 			inputString:    "abc123",
 			expectedResult: nil,
 		},
 		{
 			name:           "No parsers provided",
-			parsers:        Sequence(),
+			parsers:        Seq(),
 			inputString:    "123abc",
 			expectedResult: &Tree{Match: []rune("")},
 		},
 		{
 			name:        "start nonzero; with tag",
-			parsers:     Sequence(digitParser, letterParser).Tagged("test"),
+			parsers:     Seq(digitParser, letterParser).Tagged("test"),
 			inputString: "+++123abc",
 			start:       3,
 			expectedResult: &Tree{Match: []rune("123abc"), Tag: "test", Start: 3, Children: []*Tree{
@@ -294,25 +273,19 @@ func TestFirstOf(t *testing.T) {
 		expected *Tree
 	}{
 		{
-			name:   "single parser with tagged result succeeds",
+			name:   "single parser with newTaggedParser result succeeds",
 			input:  "abcdef",
-			parser: FirstOf(OneOrMoreLetters().Tagged("letters")),
+			parser: Or(Letters().Tagged("letters")),
 			expected: &Tree{
 				Start: 0,
 				Match: []rune("abcdef"),
-				Children: []*Tree{
-					{
-						Start: 0,
-						Match: []rune("abcdef"),
-						Tag:   "letters",
-					},
-				},
+				Tag:   "letters",
 			},
 		},
 		{
-			name:   "single parser without tagged result succeeds",
+			name:   "single parser without newTaggedParser result succeeds",
 			input:  "abcdef",
-			parser: FirstOf(OneOrMoreLetters()),
+			parser: Or(Letters()),
 			expected: &Tree{
 				Start: 0,
 				Match: []rune("abcdef"),
@@ -321,39 +294,27 @@ func TestFirstOf(t *testing.T) {
 		{
 			name:   "first parser succeeds",
 			input:  "abcdef",
-			parser: FirstOf(OneOrMoreLetters().Tagged("letters"), Digit()),
+			parser: Or(Letters().Tagged("letters"), Digit()),
 			expected: &Tree{
 				Start: 0,
 				Match: []rune("abcdef"),
-				Children: []*Tree{
-					{
-						Start: 0,
-						Match: []rune("abcdef"),
-						Tag:   "letters",
-					},
-				},
+				Tag:   "letters",
 			},
 		},
 		{
 			name:   "second parser succeeds with tag",
 			input:  "abcdef",
-			parser: FirstOf(Digit(), OneOrMoreLetters().Tagged("let")),
+			parser: Or(Digit(), Letters().Tagged("let")),
 			expected: &Tree{
 				Start: 0,
 				Match: []rune("abcdef"),
-				Children: []*Tree{
-					{
-						Start: 0,
-						Match: []rune("abcdef"),
-						Tag:   "let",
-					},
-				},
+				Tag:   "let",
 			},
 		},
 		{
 			name:   "second parser succeeds without tag",
 			input:  "abcdef",
-			parser: FirstOf(Digit(), OneOrMoreLetters()),
+			parser: Or(Digit(), Letters()),
 			expected: &Tree{
 				Start: 0,
 				Match: []rune("abcdef"),
@@ -362,20 +323,20 @@ func TestFirstOf(t *testing.T) {
 		{
 			name:     "no parser succeeds",
 			input:    "+=abcdef",
-			parser:   FirstOf(Digit(), OneOrMoreLetters()),
+			parser:   Or(Digit(), Letters()),
 			expected: nil,
 		},
 		{
 			name:     "empty fails",
 			input:    "+=abcdef",
-			parser:   FirstOf(),
+			parser:   Or(),
 			expected: nil,
 		},
 		{
 			name:   "first parser succeeds start=3",
 			input:  "+++abcdef",
 			start:  3,
-			parser: FirstOf(OneOrMoreLetters(), Digit()),
+			parser: Or(Letters(), Digit()),
 			expected: &Tree{
 				Start: 3,
 				Match: []rune("abcdef"),
@@ -402,24 +363,18 @@ func TestOpt(t *testing.T) {
 			name:   "subparser succeeds with tag",
 			input:  []rune("abcdef"),
 			start:  0,
-			parser: Opt(OneOrMoreLetters().Tagged("letters")),
+			parser: Opt(Letters().Tagged("letters")),
 			expected: &Tree{
 				Start: 0,
 				Match: []rune("abcdef"),
-				Children: []*Tree{
-					{
-						Start: 0,
-						Match: []rune("abcdef"),
-						Tag:   "letters",
-					},
-				},
+				Tag:   "letters",
 			},
 		},
 		{
 			name:   "sub-parser succeeds without tag",
 			input:  []rune("abcdef"),
 			start:  0,
-			parser: Opt(OneOrMoreLetters()),
+			parser: Opt(Letters()),
 			expected: &Tree{
 				Start: 0,
 				Match: []rune("abcdef"),
@@ -428,17 +383,16 @@ func TestOpt(t *testing.T) {
 		{
 			name:   "sub-parser fails",
 			input:  []rune("abcdef"),
-			parser: Opt(OneOrMoreDigits()),
+			parser: Opt(Digits()),
 			expected: &Tree{
 				Start: 0,
-				Match: []rune(""),
 			},
 		},
 		{
 			name:   "sub-parser succeeds pos=3",
 			input:  []rune("abcdef"),
 			start:  3,
-			parser: Opt(OneOrMoreLetters()),
+			parser: Opt(Letters()),
 			expected: &Tree{
 				Start: 3,
 				Match: []rune("def"),
@@ -453,25 +407,79 @@ func TestOpt(t *testing.T) {
 	}
 }
 
-
-func TestLeftRecursion(t *testing.T) {
-	var base = FirstOf(
-		OneOrMoreLetters().Tagged("var"),
-		OneOrMoreDigits().Tagged("num"),
-	).Tagged("")
-
-	iterm := Indirect()
-	var term = FirstOf(
-		Sequence(
-			iterm.Tagged("lhs"),
-			Exactly("*"),
-			iterm.Tagged("rhs"),
-		).Tagged("s"),
-		base,
-	).Tagged("term")
-	iterm.Set(&term)
-
-	tree := term.Parse([]rune("foobar*37"), 0, NewContext())
-	test.Eq(t, "(first:term (seq:s [&term] `*` [&term]) (first letter+:var digit+:num))", term.String())
-	test.Eq(t, "foobar*37", tree.Matched())
+func TestLeft(t *testing.T) {
+	tests := []struct {
+		name     string
+		parser   Parser
+		input    string
+		expected string
+	}{
+		{
+			name: "expression",
+			parser: Left(
+				Letters().Tagged("lhs"),
+				Seq(
+					Exactly("+").Tagged("op"),
+					Letters().Tagged("rhs")),
+			),
+			input:    "a+b",
+			expected: `((lhs "a") (op "+") (rhs "b"))`,
+		},
+		{
+			name: "expression",
+			parser: Left(
+				Letters().Tagged("lhs"),
+				Seq(
+					Exactly("+").Tagged("op"),
+					Letters().Tagged("rhs")),
+			).Tagged("add"),
+			input:    "a+b",
+			expected: `(add (lhs "a") (op "+") (rhs "b"))`,
+		},
+		{
+			name: "expression",
+			parser: Left(
+				Letters().Tagged("lhs"),
+				Seq(Exactly("+").Tagged("op"), Letters().Tagged("rhs")),
+			),
+			input:    "a+b+c",
+			expected: `(((lhs "a") (op "+") (rhs "b")) (op "+") (rhs "c"))`,
+		},
+		{
+			name: "expression",
+			parser: Left(
+				Letters().Tagged("lhs"),
+				Seq(
+					Exactly("+").Tagged("op"),
+					Letters().Tagged("rhs"),
+				),
+			).Tagged("add"),
+			input:    "a+b+c",
+			expected: `(add (add (lhs "a") (op "+") (rhs "b")) (op "+") (rhs "c"))`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			test.Eq(t, tc.expected, tc.parser.Parse([]rune(tc.input), 0, NewContext()).String())
+		})
+	}
 }
+
+// func TestZeroOrMore(t *testing.T) {
+// 	tests := []struct {
+// 		name string
+// 		parser Parser
+// 		input string
+// 		expected string
+// 	}{
+// 		{"empty input", ZeroOrMore(Letter()), "", `""`},
+// 		{"once", ZeroOrMore(Letter()), "a", `("a")`},
+// 		{"twice", ZeroOrMore(Letter()), "aa", `("aa")`},
+// 	}
+// 	for _, tc := range tests {
+// 		t.Run(tc.name, func(t *testing.T) {
+// 			test.Eq(t, tc.expected, tc.parser.Parse([]rune(tc.input), 0, NewContext()).String())
+// 		})
+// 	}
+// }
+//
