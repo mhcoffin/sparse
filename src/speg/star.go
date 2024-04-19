@@ -7,17 +7,22 @@ type StarParser struct {
 	parser Parser
 }
 
-func (z StarParser) Star() Parser {
+func (z StarParser) Omit() Parser {
+	return NewOmitParser(z)
+}
+
+func (z StarParser) Star() StarParser {
 	return z
 }
 
-func (z StarParser) Flatten() Parser {
-	return newFlatParser(z)
+func (z StarParser) Flatten() TokenParser {
+	return newTokenParser(z)
 }
 
 func (z StarParser) Parse(input []rune, start int, ctx *Context) *Tree {
 	pos := start
 	var children []*Tree
+	_, isOmitParser := z.parser.(OmitParser)
 	for {
 		child := z.parser.Parse(input, pos, ctx)
 		if child == nil || len(child.Match) == 0 || pos == len(input) {
@@ -30,7 +35,7 @@ func (z StarParser) Parse(input []rune, start int, ctx *Context) *Tree {
 			return result
 		} else {
 			pos += len(child.Match)
-			if ctx.withChildren {
+			if ctx.withChildren && !isOmitParser {
 				children = append(children, child)
 			}
 		}
@@ -41,21 +46,21 @@ func (z StarParser) ID() uuid.UUID {
 	return z.id
 }
 
-func (z StarParser) Tag() string {
-	return ""
+func (z StarParser) Tagged(tag string) TaggedParser {
+	return Tagged(z, tag)
 }
 
-func (z StarParser) Tagged(tag string) Parser {
-	return TaggedParser{
-		id:     uuid.New(),
-		parser: z,
-		tag:    tag,
-	}
-}
-
-func newStarParser(p Parser) StarParser {
-	return StarParser{
-		id:     uuid.New(),
-		parser: p,
+// Star creates a parser that matches zero or more of p. 
+func Star(p Parser) Parser {
+	switch pp := p.(type) {
+	case StarParser:
+		return pp
+	case Matcher:
+		return pp.Star()
+	default:
+		return StarParser{
+			id:     uuid.New(),
+			parser: pp,
+		}
 	}
 }

@@ -16,7 +16,7 @@ type Matcher struct {
 	tag          string
 }
 
-func (m Matcher) Star() Parser {
+func (m Matcher) Star() Matcher {
 	return Matcher{
 		id: uuid.New(),
 		matchingFunc: func(input []rune) int {
@@ -60,10 +60,6 @@ func (m Matcher) ID() uuid.UUID {
 	return m.id
 }
 
-func (m Matcher) Flatten() Parser {
-	return m
-}
-
 func (m Matcher) Tagged(tag string) Parser {
 	return Matcher{
 		id:           uuid.New(),
@@ -72,8 +68,11 @@ func (m Matcher) Tagged(tag string) Parser {
 	}
 }
 
+func (m Matcher) Omit() Parser {
+	return NewOmitParser(m)
+}
+
 // NewMatcher creates a Matcher from a MatcherFunc.
-// Distinct calls to NewMatcher produce different IDs.
 func NewMatcher(m MatchingFunc) Matcher {
 	return Matcher{
 		id:           uuid.New(),
@@ -92,7 +91,7 @@ func Any() Matcher {
 	return result
 }
 
-// Letter matches any single unicode letter. If fails if the first
+// Letter matches any single unicode letter. It fails if the first
 // rune in the input is not a letter.
 func Letter() Matcher {
 	return NewMatcher(func(input []rune) int {

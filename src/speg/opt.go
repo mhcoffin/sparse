@@ -7,12 +7,16 @@ type OptionalParser struct {
 	parser Parser
 }
 
-func (o OptionalParser) Star() Parser {
-	return newStarParser(o.parser)
+func (o OptionalParser) Omit() Parser {
+	return NewOmitParser(o)
 }
 
-func (o OptionalParser) Flatten() Parser {
-	return FlatParser{
+func (o OptionalParser) Star() Parser {
+	return Star(o.parser)
+}
+
+func (o OptionalParser) Token() TokenParser {
+	return TokenParser{
 		id:     uuid.New(),
 		parser: o,
 	}
@@ -42,12 +46,8 @@ func (o OptionalParser) Tag() string {
 	return ""
 }
 
-func (o OptionalParser) Tagged(tag string) Parser {
-	return TaggedParser{
-		id:     uuid.New(),
-		parser: o,
-		tag:    tag,
-	}
+func (o OptionalParser) Tagged(tag string) TaggedParser {
+	return Tagged(o, tag)
 }
 
 // Opt returns the result from parser if parser succeeds, or an empty

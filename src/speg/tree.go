@@ -6,12 +6,18 @@ import (
 	"strings"
 )
 
-// A Tree describes the result of matching some input.
+// A Tree describes the result of matching input.
 type Tree struct {
+	// Position where the match starts
 	Start    int
+	// Slice of runes matched. May be empty. 
 	Match    []rune
+	// Children in match. May be empty (nil).
 	Children []*Tree
+	// User-specified tag of this tree.
 	Tag      string
+	// If Omit is true, this tree will be omitted from Children
+	Omit bool
 }
 
 func (t *Tree) String() string {

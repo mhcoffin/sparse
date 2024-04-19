@@ -7,35 +7,30 @@ type SequenceParser struct {
 	subParsers []Parser
 }
 
-func (p SequenceParser) Star() Parser {
-	return newStarParser(p)
+func (p SequenceParser) Omit() Parser {
+	return NewOmitParser(p)
 }
 
-func (p SequenceParser) Flatten() Parser {
-	return newFlatParser(p)
+func (p SequenceParser) Star() Parser {
+	return Star(p)
+}
+
+func (p SequenceParser) Flatten() TokenParser {
+	return newTokenParser(p)
 }
 
 func (p SequenceParser) ID() uuid.UUID {
 	return p.id
 }
 
-func (p SequenceParser) Id() uuid.UUID {
-	return p.id
+func (p SequenceParser) Tagged(tag string) TaggedParser {
+	return Tagged(p, tag)
 }
 
-func (p SequenceParser) Tag() string {
-	return ""
-}
 
-func (p SequenceParser) Tagged(tag string) Parser {
-	return TaggedParser{
-		id:     uuid.New(),
-		parser: p,
-		tag:    tag,
-	}
-}
 
-// Parse matches a sequence of parsers.
+// Parse matches a sequence of parsers, left to right. The result Tree will have one
+// child for each of the parsers.
 func (p SequenceParser) Parse(input []rune, start int, context *Context) *Tree {
 	myResult, haveResult := context.getCachedValue(p.id, start)
 	if haveResult {
@@ -56,7 +51,9 @@ func (p SequenceParser) Parse(input []rune, start int, context *Context) *Tree {
 			return nil
 		}
 		position += len(result.Match)
-		if context.withChildren {
+		
+		_, isOmitParser := parser.(OmitParser)
+		if context.withChildren && !isOmitParser {
 			children = append(children, result)
 		}
 	}
@@ -69,10 +66,11 @@ func (p SequenceParser) Parse(input []rune, start int, context *Context) *Tree {
 	return result
 }
 
-// Seq returns a parser that succeeds if all of its sub-parsers succeed in sequence.
-func Seq(parsers ...Parser) SequenceParser {
+// Seq returns a parser that succeeds if all of its sub-parsers succeed, left-to-right.
+// The resulting Tree will have one child for each non-omitted sub-parsers.
+func Seq(subParsers ...Parser) SequenceParser {
 	return SequenceParser{
 		id:         uuid.New(),
-		subParsers: parsers,
+		subParsers: subParsers,
 	}
 }

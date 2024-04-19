@@ -9,12 +9,16 @@ type LeftRecursiveParser struct {
 	tag          string
 }
 
-func (l LeftRecursiveParser) Star() Parser {
-	return newStarParser(l)
+func (l LeftRecursiveParser) Omit() Parser {
+	return NewOmitParser(l)
 }
 
-func (l LeftRecursiveParser) Flatten() Parser {
-	return newFlatParser(l)
+func (l LeftRecursiveParser) Star() Parser {
+	return Star(l)
+}
+
+func (l LeftRecursiveParser) Flatten() TokenParser {
+	return newTokenParser(l)
 }
 
 func (l LeftRecursiveParser) Parse(input []rune, start int, ctx *Context) *Tree {
@@ -22,7 +26,7 @@ func (l LeftRecursiveParser) Parse(input []rune, start int, ctx *Context) *Tree 
 	if base == nil {
 		return nil
 	}
-	pos := len(base.Match)
+	pos := start + len(base.Match)
 
 	cont := l.continuation.Parse(input, pos, ctx)
 	if cont == nil || len(cont.Match) == 0 {
@@ -43,6 +47,7 @@ func (l LeftRecursiveParser) Parse(input []rune, start int, ctx *Context) *Tree 
 	for {
 		cont := l.continuation.Parse(input, pos, ctx)
 		if cont == nil || len(cont.Match) == 0 {
+			// TODO: add tag?
 			return lhs
 		}
 		pos += len(cont.Match)
@@ -62,10 +67,6 @@ func (l LeftRecursiveParser) Parse(input []rune, start int, ctx *Context) *Tree 
 
 func (l LeftRecursiveParser) ID() uuid.UUID {
 	return l.id
-}
-
-func (l LeftRecursiveParser) Tag() string {
-	return l.tag
 }
 
 func (l LeftRecursiveParser) Tagged(tag string) Parser {

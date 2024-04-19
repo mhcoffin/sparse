@@ -13,7 +13,7 @@ func TestMatcher_Star(t *testing.T) {
 		expected string
 	}{
 		{
-			"empty", Letter().Star(), "", `""`,
+			"empty", Star(Letter()), "", `""`,
 		},
 
 		{

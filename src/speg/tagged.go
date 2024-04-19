@@ -8,12 +8,8 @@ type TaggedParser struct {
 	tag    string
 }
 
-func (t TaggedParser) Star() Parser {
-	return newStarParser(t)
-}
-
-func (t TaggedParser) Flatten() Parser {
-	return newFlatParser(t)
+func (t TaggedParser) Omit() Parser {
+	return NewOmitParser(t)
 }
 
 func (t TaggedParser) Parse(input []rune, start int, ctx *Context) *Tree {
@@ -29,23 +25,10 @@ func (t TaggedParser) ID() uuid.UUID {
 	return t.id
 }
 
-func (t TaggedParser) Tag() string {
-	return t.tag
-}
-
-func (t TaggedParser) Tagged(tag string) Parser {
+func Tagged(p Parser, tag string) TaggedParser {
 	return TaggedParser{
 		id:     uuid.New(),
-		parser: t.parser,
-		tag:    tag,
-	}
-}
-
-// newTaggedParser returns a new parser that parses with parser and then attaches tag to the result.
-func newTaggedParser(parser Parser, tag string) TaggedParser {
-	return TaggedParser{
-		id:     uuid.New(),
-		parser: parser,
+		parser: p,
 		tag:    tag,
 	}
 }

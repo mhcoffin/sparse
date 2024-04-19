@@ -7,28 +7,22 @@ type OrParser struct {
 	subParsers []Parser
 }
 
-func (p OrParser) Star() Parser {
-	return newStarParser(p)
+func (p OrParser) Omit() Parser {
+	return NewOmitParser(p)
 }
 
-func (p OrParser) Flatten() Parser {
-	return newFlatParser(p)
+// Star is a convenience: p.Star() is equivalent to Star(p).
+func (p OrParser) Star() Parser {
+	return Star(p)
 }
 
 func (p OrParser) ID() uuid.UUID {
 	return p.id
 }
 
-func (p OrParser) Tag() string {
-	return ""
-}
-
-func (p OrParser) Tagged(tag string) Parser {
-	return TaggedParser{
-		id:     uuid.New(),
-		parser: p,
-		tag:    tag,
-	}
+// Tagged is a convenience method equivalent to Tagged(p, tag)
+func (p OrParser) Tagged(tag string) TaggedParser {
+	return Tagged(p, tag)
 }
 
 func (p OrParser) Parse(input []rune, start int, context *Context) *Tree {
@@ -47,9 +41,8 @@ func (p OrParser) Parse(input []rune, start int, context *Context) *Tree {
 	return nil
 }
 
-// Or returns the result from the first of parsers that succeeds, or
-// nil if none of them do. If it succeeds, it will have one child: the match
-// that succeeded.
+// Or returns a new parser that tries each of parsers in turn and returns results
+// from the first one that succeeds. If none succeed it fails and return nil.
 func Or(parsers ...Parser) Parser {
 	return OrParser{
 		id:         uuid.New(),

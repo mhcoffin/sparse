@@ -14,6 +14,10 @@ func (d *IndirectParser) Parse(input []rune, start int, ctx *Context) *Tree {
 	return result
 }
 
+func (d *IndirectParser) Omit() Parser {
+	return NewOmitParser(d)
+}
+
 // ID returns the ID of the underlying parser. If the underlying
 // parser is not set, returns uuid.Nil (all zeros)
 func (d *IndirectParser) ID() uuid.UUID {
