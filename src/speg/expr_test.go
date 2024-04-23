@@ -5,37 +5,34 @@ import (
 	"testing"
 )
 
-func Test(t *testing.T) {
-	var expr Parser
-	var iexpr = Indirect()
+func TestExprParser(t *testing.T) {
 
-	iexpr.Set(&expr)
-	varname := Letters().Tagged("var")
-	number := Digits().Tagged("num")
+	varname := Token(Letters()).Tagged("var")
+	number := Token(Digits()).Tagged("num")
+	lparen := Token(Exactly("("))
+	rparen := Token(Exactly(")"))
+	addOp := Token(Or(Exactly("+"), Exactly("-")))
+	multOp := Token(Or(Exactly("*"), Exactly("/")))
+	var expr Parser
+	
 	factor := Or(
 		varname,
 		number,
-		Seq(Exactly("(").Omit(),
-			iexpr,
-			Exactly(")").Omit(),
+		Seq(lparen.Omit(),
+			Indirect(&expr),
+			rparen.Omit(),
 		).Tagged("expr"),
 	)
+
 	term := Left(
 		factor,
-		Seq(
-			Or(Exactly("*"), Exactly("/")),
-			factor,
-		),
+		Seq(multOp, factor),
 	).Tagged("prod")
+
 	expr = Left(
 		term,
-		Seq(
-			Or(
-				Exactly("+"),
-				Exactly("-"),
-			),
-			term,
-		)).Tagged("sum")
+		Seq(addOp, term),
+	).Tagged("sum")
 
 	tests := []struct {
 		name     string
@@ -43,14 +40,19 @@ func Test(t *testing.T) {
 		expected string
 	}{
 		{"base", "x", `(var "x")`},
-		{"base", "x+y", `(sum (var "x") "+" (var "y"))`},
-		{"base", "x*y", `(prod (var "x") "*" (var "y"))`},
-		{"base", "x+y+z", `(sum (sum (var "x") "+" (var "y")) "+" (var "z"))`},
-		{"base", "x+y-z", `(sum (sum (var "x") "+" (var "y")) "-" (var "z"))`},
-		{"base", "x+y*z", `(sum (var "x") "+" (prod (var "y") "*" (var "z")))`},
-		{"base", "x+y*3", `(sum (var "x") "+" (prod (var "y") "*" (num "3")))`},
-		{"base", "x+y*(3+2)", `(sum (var "x") "+" (prod (var "y") "*" (expr (sum (num "3") "+" (num "2")))))`},
-		{"base", "x+y*(3+2)", `(sum (var "x") "+" (prod (var "y") "*" (expr (sum (num "3") "+" (num "2")))))`},
+		{"add", "x+y", `(sum (var "x") ("+") (var "y"))`},
+		{"add", "x + y", `(sum (var "x") ("+") (var "y"))`},
+		{"mult", "x*y", `(prod (var "x") ("*") (var "y"))`},
+		{"left associative", "x+y+z", `(sum (sum (var "x") ("+") (var "y")) ("+") (var "z"))`},
+		{"left assoc neg", "x+y-z", `(sum (sum (var "x") ("+") (var "y")) ("-") (var "z"))`},
+		{"precedence", "x+y*z", `(sum (var "x") ("+") (prod (var "y") ("*") (var "z")))`},
+		{"ditto", "x+y*3", `(sum (var "x") ("+") (prod (var "y") ("*") (num "3")))`},
+		{"parens", "x+y*(3+2)", `(sum (var "x") ("+") (prod (var "y") ("*") (expr (sum (num "3") ("+") (num "2")))))`},
+		{"precedence with parens", "x+y*(3+2)", `(sum (var "x") ("+") (prod (var "y") ("*") (expr (sum (num "3") ("+") (num "2")))))`},
+		{"complicated", "x+y*(3+2)+(7*3)", `(sum (sum (var "x") ("+") (prod (var "y") ("*") (expr (sum (num "3") ("+") (num "2"))))) ("+") (expr (prod (num "7") ("*") (num "3"))))`},
+		{"spaces", "x + y * (3+2) + (7*3)", `(sum (sum (var "x") ("+") (prod (var "y") ("*") (expr (sum (num "3") ("+") (num "2"))))) ("+") (expr (prod (num "7") ("*") (num "3"))))`},
+		{"spaces2", " x + y * ( 3 + 2 ) + (7*3)", `(sum (sum (var "x") ("+") (prod (var "y") ("*") (expr (sum (num "3") ("+") (num "2"))))) ("+") (expr (prod (num "7") ("*") (num "3"))))`},
+		{"spaces2", "	x 	+ y * ( 3 + 2 ) + (7*3)", `(sum (sum (var "x") ("+") (prod (var "y") ("*") (expr (sum (num "3") ("+") (num "2"))))) ("+") (expr (prod (num "7") ("*") (num "3"))))`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

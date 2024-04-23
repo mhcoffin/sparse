@@ -16,7 +16,8 @@ type Parser interface {
 	// ID returns the unique ID of this parser.
 	ID() uuid.UUID
 	
-	// Omit returns a new parser whose result is omitted from Children in the result. 
+	// Omit returns a new parser whose result is omitted from Children in the result.
+	// p.Omit() is the same as Omit(p). 
 	Omit() Parser
 }
 

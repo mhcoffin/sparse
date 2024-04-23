@@ -8,7 +8,7 @@ type OptionalParser struct {
 }
 
 func (o OptionalParser) Omit() Parser {
-	return NewOmitParser(o)
+	return Omit(o)
 }
 
 func (o OptionalParser) Star() Parser {

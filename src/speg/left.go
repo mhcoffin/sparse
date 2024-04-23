@@ -10,7 +10,7 @@ type LeftRecursiveParser struct {
 }
 
 func (l LeftRecursiveParser) Omit() Parser {
-	return NewOmitParser(l)
+	return Omit(l)
 }
 
 func (l LeftRecursiveParser) Star() Parser {
@@ -18,7 +18,7 @@ func (l LeftRecursiveParser) Star() Parser {
 }
 
 func (l LeftRecursiveParser) Flatten() TokenParser {
-	return newTokenParser(l)
+	return Token(l)
 }
 
 func (l LeftRecursiveParser) Parse(input []rune, start int, ctx *Context) *Tree {

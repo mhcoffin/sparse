@@ -8,7 +8,7 @@ type StarParser struct {
 }
 
 func (z StarParser) Omit() Parser {
-	return NewOmitParser(z)
+	return Omit(z)
 }
 
 func (z StarParser) Star() StarParser {
@@ -16,7 +16,7 @@ func (z StarParser) Star() StarParser {
 }
 
 func (z StarParser) Flatten() TokenParser {
-	return newTokenParser(z)
+	return Token(z)
 }
 
 func (z StarParser) Parse(input []rune, start int, ctx *Context) *Tree {

@@ -52,10 +52,6 @@ func (m Matcher) Parse(input []rune, start int, ctx *Context) *Tree {
 	return result
 }
 
-func (m Matcher) Tag() string {
-	return m.tag
-}
-
 func (m Matcher) ID() uuid.UUID {
 	return m.id
 }
@@ -69,7 +65,7 @@ func (m Matcher) Tagged(tag string) Parser {
 }
 
 func (m Matcher) Omit() Parser {
-	return NewOmitParser(m)
+	return Omit(m)
 }
 
 // NewMatcher creates a Matcher from a MatcherFunc.

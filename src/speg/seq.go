@@ -8,7 +8,7 @@ type SequenceParser struct {
 }
 
 func (p SequenceParser) Omit() Parser {
-	return NewOmitParser(p)
+	return Omit(p)
 }
 
 func (p SequenceParser) Star() Parser {
@@ -16,7 +16,7 @@ func (p SequenceParser) Star() Parser {
 }
 
 func (p SequenceParser) Flatten() TokenParser {
-	return newTokenParser(p)
+	return Token(p)
 }
 
 func (p SequenceParser) ID() uuid.UUID {

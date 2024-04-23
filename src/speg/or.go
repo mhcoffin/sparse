@@ -8,7 +8,7 @@ type OrParser struct {
 }
 
 func (p OrParser) Omit() Parser {
-	return NewOmitParser(p)
+	return Omit(p)
 }
 
 // Star is a convenience: p.Star() is equivalent to Star(p).

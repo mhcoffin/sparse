@@ -9,7 +9,7 @@ type TaggedParser struct {
 }
 
 func (t TaggedParser) Omit() Parser {
-	return NewOmitParser(t)
+	return Omit(t)
 }
 
 func (t TaggedParser) Parse(input []rune, start int, ctx *Context) *Tree {
